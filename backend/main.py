@@ -5,6 +5,9 @@ import os
 import json
 from dotenv import load_dotenv
 import google.generativeai as genai
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
 
 load_dotenv()
 
@@ -168,3 +171,16 @@ async def find_help(request: HelpRequest):
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok"}
+
+# Serve React application for Cloud Run Deployments
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+
+    @app.exception_handler(404)
+    async def custom_404_handler(request, exc):
+        # Allow normal 404s for API endpoints
+        if request.url.path.startswith("/api/"):
+            raise exc
+        # Reroute to React index.html for SPA frontend routing
+        return FileResponse(os.path.join(static_dir, "index.html"))
