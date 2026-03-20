@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
-import { Mic, ArrowRight, Activity, AlertTriangle, Phone, MapPin, Loader2, Hospital, Stethoscope, Navigation } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Mic, Activity, AlertTriangle, Phone, MapPin, Loader2, Hospital, Stethoscope, Navigation, Bell, Clock, Square } from 'lucide-react';
 import { useSpeechRecognition } from './hooks/useSpeechRecognition';
 import { analyzeEmergency, findEmergencyHelp } from './api';
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('home'); // 'home' | 'analysis' | 'location' | 'seeking_help' | 'result'
+  const [currentScreen, setCurrentScreen] = useState('home'); 
   const [analysisResult, setAnalysisResult] = useState(null);
   const [helpResult, setHelpResult] = useState(null);
   const [textInput, setTextInput] = useState('');
   const [locationInput, setLocationInput] = useState('');
+  const [familyNotified, setFamilyNotified] = useState(false);
   
   const { isListening, transcript, error, startListening, stopListening } = useSpeechRecognition();
 
-  React.useEffect(() => {
-    if (isListening && transcript) {
-      setTextInput(transcript);
-    }
+  useEffect(() => {
+    if (isListening && transcript) setTextInput(transcript);
   }, [transcript, isListening]);
+
+  const playTTS = (message) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(message);
+      utterance.rate = 0.95;
+      window.speechSynthesis.speak(utterance);
+    }
+  };
 
   const handleAnalyze = async (textToAnalyze) => {
     if (!textToAnalyze.trim()) return;
@@ -29,6 +37,7 @@ function App() {
           setCurrentScreen('location');
       } else {
           setCurrentScreen('result');
+          playTTS(result.ui_message);
       }
     } catch (err) {
       console.error(err);
@@ -46,6 +55,10 @@ function App() {
       console.error(err);
     } finally {
       setCurrentScreen('result');
+      // Speak the short bold UI message when entering Result screen
+      if (analysisResult?.ui_message) {
+        playTTS(analysisResult.ui_message + ". " + (analysisResult.top_3_actions ? analysisResult.top_3_actions[0] : ""));
+      }
     }
   };
 
@@ -67,7 +80,13 @@ function App() {
     });
   };
 
+  const handleNotifyFamily = () => {
+    setFamilyNotified(true);
+    setTimeout(() => setFamilyNotified(false), 3000);
+  };
+
   const resetApp = () => {
+    window.speechSynthesis?.cancel();
     setCurrentScreen('home');
     setAnalysisResult(null);
     setHelpResult(null);
@@ -92,11 +111,11 @@ function App() {
               onTouchStart={startListening}
               onTouchEnd={stopListening}
             >
-              <Mic size={48} color={isListening ? "white" : "var(--color-primary)"} />
+              {isListening ? <Square size={40} color="white" fill="white" /> : <Mic size={48} color="var(--color-primary)" />}
               {isListening && <div className="pulse-ring"></div>}
             </button>
-            <p className="instruction">
-              {isListening ? "Listening... Release to stop" : "Hold to describe the emergency"}
+            <p className={`instruction ${isListening ? 'text-primary' : ''}`}>
+              {isListening ? "Listening... Release to analyze" : "Hold to describe the emergency"}
             </p>
             
             <div className="text-divider"><span>OR TYPE INSTEAD</span></div>
@@ -113,7 +132,7 @@ function App() {
                 onClick={() => handleAnalyze(textInput)}
                 disabled={!textInput.trim()}
               >
-                Analyze <ArrowRight size={20} style={{marginLeft: '8px'}} />
+                Analyze Emergency
               </button>
             </div>
           </div>
@@ -156,7 +175,7 @@ function App() {
               disabled={!locationInput.trim()}
               style={{marginTop: '16px'}}
             >
-              Find Help <ArrowRight size={20} style={{marginLeft: '8px'}} />
+              Find Help
             </button>
           </div>
         </div>
@@ -176,58 +195,78 @@ function App() {
         <div className="screen fade-in result-screen">
           <div className="header sticky-header">
             <button className="back-btn" onClick={resetApp}>← Back</button>
-            <h2>AI Assessment</h2>
+            <h2>AI Decision Dashboard</h2>
           </div>
 
-          <div className={`scrollable-content`}>
-            <div className={`risk-banner risk-${analysisResult.severity.toLowerCase()}`}>
-              <Activity size={24} />
-              <div>
-                <h3>{analysisResult.severity} RISK</h3>
-                <p>{analysisResult.possible_condition}</p>
+          <div className="scrollable-content">
+            {/* Top Section: Winning UI Layout */}
+            <div className={`critical-header risk-${analysisResult.severity.toLowerCase()}`}>
+              <div className="risk-title">
+                <Activity size={32} />
+                <h1>{analysisResult.severity} RISK — ACT NOW</h1>
+              </div>
+              <h2 className="condition-text">Insight: {analysisResult.possible_condition}</h2>
+              <div className="ui-message-box">
+                <p>{analysisResult.ui_message}</p>
               </div>
             </div>
 
+            {/* Emergency Timer */}
+            {analysisResult.should_call_ambulance && (
+              <div className="timer-card fade-in">
+                <div className="timer-icon"><Clock size={28} /></div>
+                <div className="timer-info">
+                  <h3>Ambulance ETA: ~8 mins</h3>
+                  <p>Keep the patient stable while waiting.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Critical Actions Cards */}
             <div className="actions-section">
-              <h3>What to Do Now</h3>
-              <ul className="action-list">
-                {analysisResult.immediate_actions.map((action, idx) => (
-                  <li key={idx}>
-                    <span className="step-number">{idx + 1}</span>
-                    <span className="step-text">{action}</span>
-                  </li>
+              <h3>Immediate Critical Actions</h3>
+              <div className="action-cards">
+                {analysisResult.top_3_actions && analysisResult.top_3_actions.map((action, idx) => (
+                  <div className="action-card" key={idx}>
+                    <div className="action-number">{idx + 1}</div>
+                    <div className="action-text">{action}</div>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
-            {analysisResult.warnings && analysisResult.warnings.length > 0 && (
-              <div className="warnings-section">
-                <AlertTriangle size={20} color="var(--color-primary)" />
-                <ul>
-                  {analysisResult.warnings.map((warning, idx) => (
-                    <li key={idx}>{warning}</li>
+            {/* Secondary First Aid */}
+            {analysisResult.first_aid_steps && analysisResult.first_aid_steps.length > 0 && (
+              <div className="actions-section secondary-actions">
+                <h3>Follow-up First Aid</h3>
+                <ul className="checklist">
+                  {analysisResult.first_aid_steps.map((step, idx) => (
+                    <li key={idx} className="checkbox-item">
+                      <div className="checkbox-circle"></div>
+                      <span>{step}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
             )}
 
+            {/* Quick Action Buttons */}
+            <div className="quick-buttons">
+              <button className="btn btn-rapid-red" onClick={() => window.location.href="tel:911"}>
+                <Phone size={20} /> CALL AMBULANCE
+              </button>
+              <button className="btn btn-rapid-blue" onClick={handleGPSLocation}>
+                <MapPin size={20} /> SHARE LOCATION
+              </button>
+              <button className={`btn ${familyNotified ? 'btn-rapid-green' : 'btn-rapid-dark'}`} onClick={handleNotifyFamily}>
+                <Bell size={20} /> {familyNotified ? "ALERT SENT ✓" : "NOTIFY FAMILY"}
+              </button>
+            </div>
+
+            {/* Nearby Help Section */}
             {helpResult && (
               <div className="nearby-help-section fade-in">
                 <h3>Nearby Emergency Help</h3>
-                
-                {helpResult.emergency_helplines && Object.keys(helpResult.emergency_helplines).length > 0 && (
-                  <div className="help-card helplines">
-                    <h4><Phone size={18} /> Direct Emergency Helplines</h4>
-                    <div className="helplines-grid">
-                      {Object.entries(helpResult.emergency_helplines).map(([name, number]) => (
-                         <a key={name} href={`tel:${number}`} className="helpline-btn">
-                           <strong>{name.replace('_', ' ').toUpperCase()}</strong>
-                           <span>{number}</span>
-                         </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 
                 {helpResult.hospitals && helpResult.hospitals.length > 0 && (
                   <div className="help-card">
@@ -262,15 +301,6 @@ function App() {
                      </ul>
                   </div>
                 )}
-              </div>
-            )}
-
-            {analysisResult.should_call_ambulance && !helpResult && (
-              <div className="emergency-actions" style={{marginTop: '24px'}}>
-                <button className="btn btn-primary call-btn" onClick={() => window.location.href="tel:911"}>
-                  <Phone size={20} style={{marginRight: '8px'}} />
-                  Call Ambulance Immediately
-                </button>
               </div>
             )}
             

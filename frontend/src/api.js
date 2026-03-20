@@ -11,14 +11,13 @@ export const analyzeEmergency = async (text) => {
     return {
       emergency_detected: false,
       category: "other",
-      symptoms: [],
-      possible_condition: "Connection Error",
       severity: "LOW",
+      possible_condition: "Connection Error",
       confidence: "0%",
-      immediate_actions: ["Could not connect to the emergency service. Please call emergency services directly."],
+      top_3_actions: ["Could not connect to the emergency service. Please call emergency services directly."],
+      first_aid_steps: [],
       should_call_ambulance: true,
-      first_aid_type: "none",
-      warnings: ["System offline"]
+      ui_message: "System offline. Call local emergency."
     };
   }
 };

@@ -57,37 +57,31 @@ class HelpResponse(BaseModel):
 class EmergencyResponse(BaseModel):
     emergency_detected: bool
     category: str
-    symptoms: list[str]
-    possible_condition: str
     severity: str
+    possible_condition: str
     confidence: str
-    immediate_actions: list[str]
+    top_3_actions: list[str]
+    first_aid_steps: list[str]
     should_call_ambulance: bool
-    first_aid_type: str
-    warnings: list[str]
+    ui_message: str
 
 @app.post("/api/analyze", response_model=EmergencyResponse)
 async def analyze_emergency(request: AnalyzeRequest):
     if not request.text:
         raise HTTPException(status_code=400, detail="Text input is required.")
 
-    # System prompt enforcing behavior rules and JSON output
     system_instruction = """
-    You are an AI Emergency Copilot acts as:
-    - Emergency intent detector
-    - Medical reasoning engine
-    - Risk assessor
-    - Action generator
+    You are a real-time emergency response AI.
+    Your job is to convert panic-driven, unclear human input into precise, life-saving instructions.
 
-    Critical Behavior Rules:
-    1. Never say "I am not a doctor"
-    2. Never give vague suggestions
-    3. Always prioritize actionable steps
-    4. Keep language simple and direct
-    5. Assume user is under stress → minimize text overload
-    6. If HIGH severity → strongly recommend ambulance
-    
-    Extract key entities: Symptoms, Duration, Patient details, Environmental clues.
+    RULES:
+    - Be direct and action-oriented
+    - Do NOT explain too much
+    - Do NOT act like a chatbot
+    - Prioritize survival
+    - Keep output to top 3-5 critical actions in 'top_3_actions'
+    - 'ui_message' must be a short, bold instruction for the user to see immediately.
+
     Risk Classification:
     - HIGH → Immediate life threat
     - MEDIUM → Urgent but stable
@@ -118,14 +112,13 @@ async def analyze_emergency(request: AnalyzeRequest):
         return {
             "emergency_detected": False,
             "category": "other",
-            "symptoms": [],
-            "possible_condition": "Error analyzing input.",
             "severity": "LOW",
+            "possible_condition": "Error analyzing input.",
             "confidence": "0%",
-            "immediate_actions": ["Please try again or call emergency services if needed."],
+            "top_3_actions": ["Please try again or call emergency services if needed."],
+            "first_aid_steps": [],
             "should_call_ambulance": False,
-            "first_aid_type": "none",
-            "warnings": [str(e)]
+            "ui_message": str(e)
         }
 
 @app.post("/api/find_help", response_model=HelpResponse)
